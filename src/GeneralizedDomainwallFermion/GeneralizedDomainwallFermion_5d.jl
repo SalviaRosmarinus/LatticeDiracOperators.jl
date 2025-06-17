@@ -139,6 +139,22 @@ function apply_Pdag!(
     end
 end
 
+function apply_P_edge!(
+    xout::Abstract_GeneralizedDomainwallFermion_5D{NC,WilsonFermion},
+    x::Abstract_GeneralizedDomainwallFermion_5D{NC,WilsonFermion},) where {NC,WilsonFermion}
+
+    clear_fermion!(xout)
+    ratio = 1.0
+
+    i5 = 1
+    # LTK Definition P_- -> P_+
+    mul_1plusγ5x_add!(xout.w[i5], x.w[i5], ratio)
+
+    i5 = xout.L5
+    # LTK Definition P_+ -> P_-
+    mul_1minusγ5x_add!(xout.w[i5], x.w[i5], ratio)
+end
+
 function apply_1pD!(
     xout::Abstract_GeneralizedDomainwallFermion_5D{NC,WilsonFermion},
     L5,

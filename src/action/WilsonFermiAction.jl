@@ -79,6 +79,8 @@ struct WilsonFermiAction{Dim,Dirac,fermion,gauge,hascloverterm} <:
             SUNgenerator
         )
 
+        unused!(D._temporary_fermi, it_x)
+
     end
 end
 
