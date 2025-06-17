@@ -166,7 +166,14 @@ function calc_UdSfdU_fromX!(
 
 
         # (r-γ_μ) U_{k,μ} X_{k+μ}
-        mul!(temp1_f, view(W.rminusγ, :, :, μ), temp0_f)
+        #mul!(temp1_f, view(W.rminusγ, :, :, μ), temp0_f)
+        if W.r == 1
+            mul_1minusγμx!(temp1_f, temp0_f, μ)
+        else
+            mul!(temp1_f, view(W.rminusγ, :, :, μ), temp0_f)
+        end
+
+        #mul!(temp1_f, view(W.rminusγ, :, :, μ), temp0_f)
 
         # κ (r-γ_μ) U_{k,μ} X_{k+μ}
         mul!(temp0_f, W.hopp[μ], temp1_f)
@@ -182,7 +189,11 @@ function calc_UdSfdU_fromX!(
         mul!(temp0_f, Yplus', U[μ]')
 
         # Y_{k+μ}^dag U_{k,μ}^dag*(r+γ_μ)
-        mul!(temp1_f, temp0_f, view(W.rplusγ, :, :, μ))
+        if W.r == 1
+            mul_x1plusγμ!(temp1_f, temp0_f, μ)
+        else
+            mul!(temp1_f, temp0_f, view(W.rplusγ, :, :, μ))
+        end
 
         # κ Y_{k+μ}^dag U_{k,μ}^dag*(r+γ_μ)
         mul!(temp0_f, W.hopm[μ], temp1_f)
@@ -263,7 +274,12 @@ function calc_p_UdSfdU_fromX!(
 
 
         # (r-γ_μ) U_{k,μ} X_{k+μ}
-        mul!(temp1_f, view(W.rminusγ, :, :, μ), temp0_f)
+        #println("1")
+        if W.r == 1
+            mul_1minusγμx!(temp1_f, temp0_f, μ)
+        else
+            mul!(temp1_f, view(W.rminusγ, :, :, μ), temp0_f)
+        end
 
         # κ (r-γ_μ) U_{k,μ} X_{k+μ}
         mul!(temp0_f, W.hopp[μ], temp1_f)
@@ -281,7 +297,13 @@ function calc_p_UdSfdU_fromX!(
         mul!(temp0_f, Yplus', U[μ]')
 
         # Y_{k+μ}^dag U_{k,μ}^dag*(r+γ_μ)
-        mul!(temp1_f, temp0_f, view(W.rplusγ, :, :, μ))
+
+        if W.r == 1
+            mul_x1plusγμ!(temp1_f, temp0_f, μ)
+        else
+            mul!(temp1_f, temp0_f, view(W.rplusγ, :, :, μ))
+        end
+
 
         # κ Y_{k+μ}^dag U_{k,μ}^dag*(r+γ_μ)
         mul!(temp0_f, W.hopm[μ], temp1_f)
@@ -358,6 +380,8 @@ function sample_pseudofermions!(
         display(W.U[ik])
         error("ddW")
     end
+    #println(typeof(W'))
+    #display(ξ)
 
     mul!(ϕ, W', ξ)
     ik = findfirst(x -> isnan(x), ϕ.f)
