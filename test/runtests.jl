@@ -36,6 +36,7 @@ import LatticeMatrices
             include("hisq_mpialattice.jl")
         end
         include("domainwall_mpialattice.jl")
+        include("generalized_domainwall_evenodd.jl")
         include("domainwall_grid_reference.jl")
     end
 

@@ -28,6 +28,7 @@ using Test
         "staggered_mpialattice.jl",
         "hisq_mpialattice.jl",
         "domainwall_mpialattice.jl",
+        "generalized_domainwall_evenodd.jl",
         "domainwall_grid_reference.jl",
     ]
     for test_file in test_files
