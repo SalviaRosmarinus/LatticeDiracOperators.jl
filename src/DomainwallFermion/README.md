@@ -109,14 +109,17 @@ agreement of their solutions, and reports median solve times and
 `non_eo_time / eo_time`. Run it in an environment containing the v1 packages:
 
 ```sh
-JACC_BACKEND=Threads julia --project=<v1-environment> test/generalized_domainwall_eo_solve_comparison.jl
+julia --project=<v1-environment> test/generalized_domainwall_eo_solve_comparison.jl
 ```
 
 The comparison defaults to a hot `4^4` lattice, `L5=4`, and five samples per
 solve. Set `LDO_EO_BENCH_N`, `LDO_EO_BENCH_L5`, or `LDO_EO_BENCH_REPEATS` to
-change these values. It uses one process, synchronizes backend work, and
-excludes operator construction and warmup from timings. A speed ratio below
-one means that EO is slower on the measured configuration.
+change these values. It uses the active project's JACC backend. Set
+`LDO_TEST_MPI=true` under an MPI launcher to split a physical direction across
+ranks (`LDO_EO_BENCH_AXIS=1` by default). `LDO_EO_BENCH_N` is the global extent.
+Timings synchronize backend work, use an MPI barrier before each sample, and
+report the maximum rank time. They exclude operator construction and warmup.
+A speed ratio below one means that EO is slower on the measured configuration.
 
 With EO enabled, the action, pseudofermion refresh, gauge derivative, and
 momentum update all use the same Schur determinant ratio. Pseudofermions
@@ -141,8 +144,12 @@ EO Krylov operations also defer halo synchronization during vector algebra
 and internal matvecs; public matvecs and successful solves return clean halos.
 The shared solver recurrences and non-EO field operations are unchanged.
 This is not a compressed-storage or specialized GPU implementation. CPU regression
-coverage is in `test/generalized_domainwall_evenodd.jl`. MPI/GPU execution
-and production trajectory performance require separate validation.
+coverage is in `test/generalized_domainwall_evenodd.jl`. The portable runner
+`test/generalized_domainwall_eo_backends.jl` reuses these checks on the chosen
+JACC backend and compares decomposed fields with an undistributed reference.
+See [`test/eo/README.md`](../../test/eo/README.md) for CPU, MPI, GPU, and MPI+GPU
+commands. GPU hardware and production trajectory performance require separate
+validation; a CPU run does not validate a GPU backend.
 
 Omitting `"evenodd"` (or setting it to `false`) retains the existing path.
 This switch currently applies to the LatticeMatrices-backed

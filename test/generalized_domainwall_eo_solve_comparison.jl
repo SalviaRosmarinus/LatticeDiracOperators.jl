@@ -1,8 +1,10 @@
 # Run in an environment containing the v1 packages:
-#   JACC_BACKEND=Threads julia --project=<v1-environment> \
+#   julia --project=<v1-environment> \
 #       test/generalized_domainwall_eo_solve_comparison.jl
 # Optional: LDO_EO_BENCH_N=4 LDO_EO_BENCH_L5=4 LDO_EO_BENCH_REPEATS=5
-# Single-process comparison of the raw systems D*x=b and D†*x=b.
+# Set LDO_TEST_MPI=true under mpiexec to compare distributed solves.
+# LDO_EO_BENCH_AXIS selects the split direction (1:4); N is the GLOBAL extent.
+# The active project's JACC backend is used for both D*x=b and D†*x=b.
 
 import JACC
 JACC.@init_backend
@@ -13,16 +15,21 @@ using LatticeMatrices
 using LinearAlgebra
 using Test
 
+include(joinpath(@__DIR__, "test_communicator.jl"))
+
 function _eo_comparison_timed_solve!(solution, D, source)
     # Every sample starts from zero. Setup, clearing, and pending backend work
     # are excluded; EO reduction/reconstruction and CG RHS formation are not.
     clear_fermion!(solution)
     JACC.synchronize()
+    ldo_test_barrier()
     elapsed = @elapsed begin
         solve_DinvX!(solution, D, source)
         JACC.synchronize()
     end
-    return elapsed
+    # All ranks report the slowest rank's time, including solver communication
+    # and device completion but excluding the initial barrier and this reduce.
+    return ldo_test_allreduce_max(elapsed)
 end
 
 function _eo_comparison_relative_difference!(work, left, right)
@@ -48,14 +55,20 @@ end
     N = parse(Int, get(ENV, "LDO_EO_BENCH_N", "4"))
     L5 = parse(Int, get(ENV, "LDO_EO_BENCH_L5", "4"))
     repeats = parse(Int, get(ENV, "LDO_EO_BENCH_REPEATS", "5"))
+    axis = parse(Int, get(ENV, "LDO_EO_BENCH_AXIS", "1"))
+    nprocs = ldo_test_comm_size()
     N >= 2 && iseven(N) || throw(ArgumentError("LDO_EO_BENCH_N must be positive and even"))
     L5 >= 2 || throw(ArgumentError("LDO_EO_BENCH_L5 must be at least 2"))
     repeats >= 1 || throw(ArgumentError("LDO_EO_BENCH_REPEATS must be positive"))
+    axis in 1:4 || throw(ArgumentError("LDO_EO_BENCH_AXIS must be in 1:4"))
+    N % nprocs == 0 || throw(ArgumentError(
+        "global extent LDO_EO_BENCH_N must be divisible by the MPI rank count"))
 
     gsize = (N, N, N, N)
+    process_grid = ntuple(d -> d == axis ? nprocs : 1, 4)
     U = gauge_configuration(
         gsize; colors=3, halo=1, start=:hot, seed=UInt64(47),
-        process_grid=(1, 1, 1, 1), comm=SerialCommunicator(), verbose=0)
+        process_grid, comm=LDO_TEST_COMM, verbose=0)
     source = Initialize_pseudofermion_fields(U[1], "GeneralizedDomainwall"; L5)
     gauss_distribution_fermion!(source; seed=42)
     solution_full, solution_eo = similar(source), similar(source)
@@ -71,7 +84,9 @@ end
         "cs" => collect(range(0.6, 0.1; length=L5)),
         "eps_CG" => 1e-20, "MaxCGstep" => 3000, "verbose_level" => 0)
 
-    @info "EO solve comparison setup (single process; setup/warmup excluded)" lattice=gsize L5 repeats threads=Threads.nthreads() storage=typeof(source.f.A) eps_CG=parameters["eps_CG"] tolerance
+    if ldo_test_comm_rank() == 0
+        @info "EO solve comparison setup (setup/warmup excluded)" lattice=gsize L5 repeats ranks=nprocs process_grid backend=JACC.backend threads=Threads.nthreads() storage=typeof(source.f.A) eps_CG=parameters["eps_CG"] tolerance
+    end
 
     for method in ("cg", "bicg", "bicgstab")
         @testset "$method" begin
@@ -135,8 +150,10 @@ end
                     @test isfinite(speedup) && speedup > 0
                     # Above 1 means EO is faster; below 1 means EO is slower.
                     # The speed ratio is informational, not a pass criterion.
-                    @info "EO/non-EO solve timing (median; speedup = non-EO / EO)" method direction non_eo_ms=full_ms eo_ms speedup
-                    @info "EO/non-EO solution agreement" method direction non_eo_residual=maximum(residuals_full) eo_residual=maximum(residuals_eo) relative_solution_difference=maximum(differences)
+                    if ldo_test_comm_rank() == 0
+                        @info "EO/non-EO solve timing (median; speedup = non-EO / EO)" method direction non_eo_ms=full_ms eo_ms speedup
+                        @info "EO/non-EO solution agreement" method direction non_eo_residual=maximum(residuals_full) eo_residual=maximum(residuals_eo) relative_solution_difference=maximum(differences)
+                    end
 
                     # Exercise the new non-EO CG public API beyond timing:
                     # in-place inputs, diagnostics, and the PV-composed wrapper.

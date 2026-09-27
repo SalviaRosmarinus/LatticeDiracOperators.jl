@@ -1,3 +1,6 @@
+import JACC
+JACC.@init_backend
+
 using Gaugefields, LatticeDiracOperators, LatticeMatrices, LinearAlgebra, Test
 
 include(joinpath(@__DIR__, "test_communicator.jl"))
@@ -361,8 +364,11 @@ end
     for (mu, local_site, direction) in ((1, (1, 1, 1, 1), directions[1]),
         (4, (2, 1, 1, 2), directions[2]))
         site = local_site .+ U[mu].U.nw
-        link = copy(U[mu].U.A[:, :, site...])
-        F = force[mu].U.A[:, :, site...]
+        # The small finite-difference oracle runs on the host; production
+        # action/force evaluation continues to use the selected JACC backend.
+        link_data = Array(U[mu].U.A)
+        link = copy(link_data[:, :, site...])
+        F = Array(force[mu].U.A)[:, :, site...]
         anti = (F - F') / 2
         ta = anti - tr(anti) * I / 3
         local_derivative = ldo_test_comm_rank() == 0 ? -2real(tr(ta * direction)) : 0.0
@@ -372,8 +378,11 @@ end
             substitute_U!(up, U)
             substitute_U!(um, U)
             if ldo_test_comm_rank() == 0
-                up[mu].U.A[:, :, site...] .= exp(h * direction) * link
-                um[mu].U.A[:, :, site...] .= exp(-h * direction) * link
+                plus, minus = copy(link_data), copy(link_data)
+                plus[:, :, site...] .= exp(h * direction) * link
+                minus[:, :, site...] .= exp(-h * direction) * link
+                copyto!(up[mu].U.A, plus)
+                copyto!(um[mu].U.A, minus)
             end
             mark_halo_dirty!(up[mu].U)
             mark_halo_dirty!(um[mu].U)
@@ -393,7 +402,7 @@ end
     EO_Dop.calc_p_UdSfdU!(momentum, action, U, phi, 0.25)
     EO_Dop.calc_p_UdSfdU!(momentum, action, U, phi, 0.75)
     for mu in 1:4
-        @test momentum[mu].a.A ≈ md_force[mu].a.A rtol=2e-10 atol=2e-11
+        @test Array(momentum[mu].a.A) ≈ Array(md_force[mu].a.A) rtol=2e-10 atol=2e-11
     end
     reset_trajectory_state!(provider)
     @test evaluate_FermiAction(action, U, phi) ≈ value rtol=1e-12
