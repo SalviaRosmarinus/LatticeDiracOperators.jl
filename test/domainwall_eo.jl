@@ -1,53 +1,19 @@
-# Standalone GeneralizedDomainwall EO tests for upstream PR #101.
-# https://github.com/akio-tomiya/LatticeDiracOperators.jl/pull/101
-# Consolidated from its tests at cd5ac29589e6e189595dc23d5326342a3c2e235e.
-#
-# This file requires the EO implementation from PR #101. Set up a separate
-# Julia 1.11+ environment so it can also be run from this fork's older master:
-#
-#   julia --project=/tmp/ldo-eo -e '
-#     using Pkg
-#     Pkg.add([
-#       PackageSpec(url="https://github.com/SalviaRosmarinus/LatticeDiracOperators.jl",
-#                   rev="cd5ac29589e6e189595dc23d5326342a3c2e235e"),
-#       PackageSpec(name="Gaugefields", version="1.1.9"),
-#       PackageSpec(name="LatticeMatrices", version="1.2.8"),
-#       PackageSpec(name="JACC", version="1.3.1"),
-#       PackageSpec(name="MPI", version="0.20.26")
-#     ])'
-#   julia --project=/tmp/ldo-eo -e 'import JACC; JACC.set_backend("threads")'
-#   julia --startup-file=no --project=/tmp/ldo-eo test/generalized_domainwalltest.jl
-#
-# Two MPI ranks (using the MPI executable selected by MPI.jl):
-#   LDO_TEST_MPI=true LDO_TEST_EXPECT_RANKS=2 julia --project=/tmp/ldo-eo -e 'using MPI; run(`$(MPI.mpiexec()) -n 2 $(Base.julia_cmd()) --startup-file=no --project=/tmp/ldo-eo test/generalized_domainwalltest.jl`)'
-#
-# For GPU / MPI+GPU, install and select the appropriate JACC backend in that
-# environment and set LDO_TEST_REQUIRE_GPU=true. ComplexF64 is required.
-# GPU hardware validation has not been performed.
-#
-# Optional settings: LDO_EO_BENCH_N=4 (global extent), LDO_EO_BENCH_L5=4,
-# LDO_EO_BENCH_REPEATS=5, LDO_EO_BENCH_AXIS=1 (MPI split axis, 1-4).
-# Residuals and solution agreement are assertions; speedups are informational.
-# All numerical, action/force, halo, decomposition and solve-comparison tests
-# are contained in this file. It neither includes other test files nor installs
-# packages or changes the active environment when run.
-
-for dependency in ("JACC", "LatticeDiracOperators", "Gaugefields", "LatticeMatrices")
-    Base.find_package(dependency) === nothing && error(
-        "Missing $dependency. Set up the separate EO environment documented " *
-        "above, then run with --project=/tmp/ldo-eo.")
-end
+# Generalized domain-wall even/odd preconditioning tests.
+# Run with an environment containing the EO implementation:
+#   julia --startup-file=no --project=<environment> test/domainwall_eo.jl
+# See test/eo/README.md in the EO checkout for environment setup and MPI/GPU use.
+# LDO_TEST_MPI=true enables MPI; LDO_TEST_REQUIRE_GPU=true rejects CPU fallback.
+# Optional: LDO_EO_BENCH_N=4, LDO_EO_BENCH_L5=4, LDO_EO_BENCH_REPEATS=5.
+# Speedups are informational; solution agreement and residuals are assertions.
 
 import JACC
 JACC.@init_backend
 
-using Gaugefields, LatticeDiracOperators, LatticeMatrices, LinearAlgebra, Test
-
-isdefined(LatticeDiracOperators.Dirac_operators,
-    :D5DW_GeneralizedDomainwall_operator_evenodd_MPILattice) || error(
-    "These tests require the EO implementation from PR #101. " *
-    "Run with --project=/tmp/ldo-eo after the setup documented above; " *
-    "the old master implementation cannot run this test.")
+using Gaugefields
+using LatticeDiracOperators
+using LatticeMatrices
+using LinearAlgebra
+using Test
 
 if !isdefined(@__MODULE__, :LDO_TEST_COMM)
     const LDO_TEST_MPI_ENABLED =
